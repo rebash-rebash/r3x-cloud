@@ -2,6 +2,7 @@ import { createSignal } from "solid-js";
 import { listen } from "@tauri-apps/api/event";
 import type { CloudResource, ScanProgress, ScanResult } from "../lib/types";
 import * as ipc from "../lib/ipc";
+import { runAnalysis as runAnalysisStore } from "./analysis";
 
 const [scanning, setScanning] = createSignal(false);
 const [scanProgress, setScanProgress] = createSignal<ScanProgress[]>([]);
@@ -47,6 +48,9 @@ export async function startScan(accountId: string) {
     // Load the resources from the completed scan
     const scanResources = await ipc.getScanResources(result.scan_id);
     setResources(scanResources);
+
+    // Auto-run analysis after scan completes
+    runAnalysisStore(accountId).catch(() => {});
   } catch (e) {
     setScanError(String(e));
   } finally {

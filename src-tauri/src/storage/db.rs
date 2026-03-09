@@ -1,7 +1,18 @@
 use crate::cloud::provider::{CloudAccount, CloudResource, ProviderKind};
 use rusqlite::{params, Connection};
+use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::Manager;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanRecord {
+    pub id: String,
+    pub account_id: String,
+    pub started_at: String,
+    pub completed_at: Option<String>,
+    pub status: String,
+    pub resource_count: i64,
+}
 
 pub struct Database {
     conn: Mutex<Connection>,
@@ -230,6 +241,77 @@ impl Database {
             })?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(resources)
+    }
+
+    pub fn list_scans(&self, account_id: &str) -> anyhow::Result<Vec<ScanRecord>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, account_id, started_at, completed_at, status, resource_count FROM scans WHERE account_id = ?1 ORDER BY started_at DESC LIMIT 20",
+        )?;
+        let scans = stmt
+            .query_map(params![account_id], |row| {
+                Ok(ScanRecord {
+                    id: row.get(0)?,
+                    account_id: row.get(1)?,
+                    started_at: row.get(2)?,
+                    completed_at: row.get(3)?,
+                    status: row.get(4)?,
+                    resource_count: row.get(5)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(scans)
+    }
+
+    // --- Rule config operations ---
+
+    pub fn save_rule_configs(&self, configs: &[(String, bool)]) -> anyhow::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "INSERT OR REPLACE INTO rule_configs (rule_id, enabled) VALUES (?1, ?2)",
+        )?;
+        for (rule_id, enabled) in configs {
+            stmt.execute(params![rule_id, *enabled as i32])?;
+        }
+        Ok(())
+    }
+
+    pub fn get_rule_configs(&self) -> anyhow::Result<Vec<(String, bool)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT rule_id, enabled FROM rule_configs")?;
+        let configs = stmt
+            .query_map([], |row| {
+                let rule_id: String = row.get(0)?;
+                let enabled: i32 = row.get(1)?;
+                Ok((rule_id, enabled != 0))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(configs)
+    }
+
+    /// Get cost trend: total monthly cost per completed scan, ordered by time.
+    pub fn get_cost_trend(&self, account_id: &str) -> anyhow::Result<Vec<(String, String, f64, i64)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT s.id, s.completed_at, COALESCE(SUM(r.monthly_cost), 0.0), s.resource_count
+             FROM scans s
+             LEFT JOIN resources r ON r.scan_id = s.id
+             WHERE s.account_id = ?1 AND s.status = 'completed'
+             GROUP BY s.id
+             ORDER BY s.completed_at ASC
+             LIMIT 30",
+        )?;
+        let trend = stmt
+            .query_map(params![account_id], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, f64>(2)?,
+                    row.get::<_, i64>(3)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(trend)
     }
 
     pub fn get_latest_scan_id(&self, account_id: &str) -> anyhow::Result<Option<String>> {

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 /// Find the gcloud CLI binary. GUI apps on macOS don't inherit shell PATH,
 /// so we check common installation locations.
-fn find_gcloud() -> Option<String> {
+pub fn find_gcloud() -> Option<String> {
     // 1. Try PATH first (works in terminal / dev mode)
     if let Ok(output) = std::process::Command::new("which").arg("gcloud").output() {
         if output.status.success() {
@@ -190,12 +190,59 @@ impl CloudProvider for GcpProvider {
             ResourceType::MachineImage => {
                 super::images::scan_images(self, &progress_tx).await
             }
-            _ => {
-                tracing::warn!(
-                    "Resource type {} not yet implemented for GCP",
-                    resource_type
-                );
-                Ok(vec![])
+            ResourceType::StorageBucket => {
+                super::storage::scan_buckets(self, &progress_tx).await
+            }
+            ResourceType::ServerlessFunction => {
+                super::functions::scan_functions(self, &progress_tx).await
+            }
+            ResourceType::CloudSqlInstance => {
+                super::cloudsql::scan_sql_instances(self, &progress_tx).await
+            }
+            ResourceType::CloudRunService => {
+                super::cloudrun::scan_services(self, &progress_tx).await
+            }
+            ResourceType::Network => {
+                super::networks::scan_networks(self, &progress_tx).await
+            }
+            ResourceType::DataprocCluster => {
+                super::dataproc::scan_dataproc_clusters(self, &progress_tx).await
+            }
+            ResourceType::SecretManagerSecret => {
+                super::secrets::scan_secrets(self, &progress_tx).await
+            }
+            ResourceType::LogSink => {
+                super::logging::scan_log_sinks(self, &progress_tx).await
+            }
+            ResourceType::MemorystoreInstance => {
+                super::memorystore::scan_memorystore_instances(self, &progress_tx).await
+            }
+            ResourceType::AppEngineVersion => {
+                super::appengine::scan_appengine_versions(self, &progress_tx).await
+            }
+            ResourceType::GkeCluster => {
+                super::gke::scan_gke_clusters(self, &progress_tx).await
+            }
+            ResourceType::BigQueryDataset => {
+                super::bigquery::scan_bigquery_datasets(self, &progress_tx).await
+            }
+            ResourceType::PubSubTopic => {
+                super::pubsub::scan_topics(self, &progress_tx).await
+            }
+            ResourceType::PubSubSubscription => {
+                super::pubsub::scan_subscriptions(self, &progress_tx).await
+            }
+            ResourceType::SpannerInstance => {
+                super::spanner::scan_spanner_instances(self, &progress_tx).await
+            }
+            ResourceType::NatGateway => {
+                super::nat::scan_nat_gateways(self, &progress_tx).await
+            }
+            ResourceType::VpnTunnel => {
+                super::vpn::scan_vpn_tunnels(self, &progress_tx).await
+            }
+            ResourceType::ArtifactRegistryRepo => {
+                super::artifact_registry::scan_artifact_registry_repos(self, &progress_tx).await
             }
         }
     }
@@ -209,6 +256,24 @@ impl CloudProvider for GcpProvider {
             ResourceType::SecurityGroup,
             ResourceType::LoadBalancer,
             ResourceType::MachineImage,
+            ResourceType::StorageBucket,
+            ResourceType::ServerlessFunction,
+            ResourceType::CloudSqlInstance,
+            ResourceType::CloudRunService,
+            ResourceType::Network,
+            ResourceType::DataprocCluster,
+            ResourceType::SecretManagerSecret,
+            ResourceType::LogSink,
+            ResourceType::MemorystoreInstance,
+            ResourceType::AppEngineVersion,
+            ResourceType::GkeCluster,
+            ResourceType::BigQueryDataset,
+            ResourceType::PubSubTopic,
+            ResourceType::PubSubSubscription,
+            ResourceType::SpannerInstance,
+            ResourceType::NatGateway,
+            ResourceType::VpnTunnel,
+            ResourceType::ArtifactRegistryRepo,
         ]
     }
 }

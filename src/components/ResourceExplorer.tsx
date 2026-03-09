@@ -6,10 +6,12 @@ import {
   formatResourceType,
   statusColor,
 } from "../lib/format";
-import type { CloudResource } from "../lib/types";
+import type { CloudResource, ResourceType } from "../lib/types";
+import ResourceDetail from "./ResourceDetail";
 
 interface Props {
-  searchQuery: string;
+  typeFilter: ResourceType | null;
+  onClearFilter: () => void;
 }
 
 type SortField = "name" | "status" | "region" | "resource_type" | "monthly_cost";
@@ -19,12 +21,20 @@ export default function ResourceExplorer(props: Props) {
   const [sortField, setSortField] = createSignal<SortField>("name");
   const [sortDir, setSortDir] = createSignal<SortDir>("asc");
   const [selectedIdx, setSelectedIdx] = createSignal(-1);
+  const [detailResource, setDetailResource] = createSignal<CloudResource | null>(null);
+  const [searchQuery, setSearchQuery] = createSignal("");
 
   const filteredResources = createMemo(() => {
     let items = resources();
 
+    // Filter by resource type
+    const tf = props.typeFilter;
+    if (tf) {
+      items = items.filter((r) => r.resource_type === tf);
+    }
+
     // Filter by search query
-    const q = props.searchQuery.toLowerCase();
+    const q = searchQuery().toLowerCase();
     if (q) {
       items = items.filter(
         (r) =>
@@ -70,6 +80,11 @@ export default function ResourceExplorer(props: Props) {
     return sortDir() === "asc" ? " ^" : " v";
   };
 
+  const handleRowClick = (resource: CloudResource, idx: number) => {
+    setSelectedIdx(idx);
+    setDetailResource(resource);
+  };
+
   return (
     <div>
       <div
@@ -80,11 +95,37 @@ export default function ResourceExplorer(props: Props) {
           "margin-bottom": "12px",
         }}
       >
-        <h2 style={{ "font-size": "18px" }}>Resources</h2>
-        <span style={{ "font-size": "12px", color: "var(--text-muted)" }}>
-          {filteredResources().length} resource
-          {filteredResources().length !== 1 ? "s" : ""}
-        </span>
+        <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+          <h2 style={{ "font-size": "18px" }}>Resources</h2>
+          <Show when={props.typeFilter}>
+            <span
+              class="status-badge"
+              style={{
+                color: "var(--color-accent)",
+                background: "var(--bg-active)",
+                cursor: "pointer",
+                "font-size": "11px",
+              }}
+              onClick={props.onClearFilter}
+            >
+              {formatResourceType(props.typeFilter!)} &times;
+            </span>
+          </Show>
+        </div>
+        <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
+          <input
+            id="search-input"
+            class="header-search"
+            type="text"
+            placeholder="Search resources... (/)"
+            value={searchQuery()}
+            onInput={(e) => setSearchQuery(e.currentTarget.value)}
+          />
+          <span style={{ "font-size": "12px", color: "var(--text-muted)", "white-space": "nowrap" }}>
+            {filteredResources().length} resource
+            {filteredResources().length !== 1 ? "s" : ""}
+          </span>
+        </div>
       </div>
 
       <Show
@@ -124,7 +165,8 @@ export default function ResourceExplorer(props: Props) {
                 {(resource, idx) => (
                   <tr
                     class={selectedIdx() === idx() ? "selected" : ""}
-                    onClick={() => setSelectedIdx(idx())}
+                    onClick={() => handleRowClick(resource, idx())}
+                    style={{ cursor: "pointer" }}
                   >
                     <td title={resource.name}>{resource.name}</td>
                     <td>{formatResourceType(resource.resource_type)}</td>
@@ -153,6 +195,11 @@ export default function ResourceExplorer(props: Props) {
           </table>
         </div>
       </Show>
+
+      <ResourceDetail
+        resource={detailResource()}
+        onClose={() => setDetailResource(null)}
+      />
     </div>
   );
 }

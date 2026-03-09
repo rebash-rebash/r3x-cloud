@@ -1,6 +1,6 @@
 import { createSignal, onMount, onCleanup, Show } from "solid-js";
 import "./styles/global.css";
-import type { ViewKind } from "./lib/types";
+import type { ViewKind, ResourceType } from "./lib/types";
 import { loadAccounts, activeAccount } from "./stores/cloud";
 import { setupScanListeners, startScan } from "./stores/scan";
 import { toggleTheme } from "./stores/theme";
@@ -11,18 +11,39 @@ import Dashboard from "./components/Dashboard";
 import ResourceExplorer from "./components/ResourceExplorer";
 import ScanPanel from "./components/ScanPanel";
 import AccountManager from "./components/AccountManager";
+import RecommendationsPanel from "./components/RecommendationsPanel";
+import CommandPalette from "./components/CommandPalette";
+import ExportDialog from "./components/ExportDialog";
+import ScanHistory from "./components/ScanHistory";
+import InfraMap from "./components/InfraMap";
+import SettingsPanel from "./components/SettingsPanel";
+import ScanDiff from "./components/ScanDiff";
 
 function App() {
   const [activeView, setActiveView] = createSignal<ViewKind>("dashboard");
-  const [searchQuery, setSearchQuery] = createSignal("");
+  const [paletteOpen, setPaletteOpen] = createSignal(false);
+  const [exportOpen, setExportOpen] = createSignal(false);
+  const [typeFilter, setTypeFilter] = createSignal<ResourceType | null>(null);
 
   onMount(() => {
     loadAccounts();
     setupScanListeners();
   });
 
+  const navigateToResources = (type?: ResourceType) => {
+    setTypeFilter(type ?? null);
+    setActiveView("resources");
+  };
+
   // Global keyboard shortcuts
   const handleKeyDown = (e: KeyboardEvent) => {
+    // Close palette/export on Escape
+    if (e.key === "Escape") {
+      if (paletteOpen()) { setPaletteOpen(false); return; }
+      if (exportOpen()) { setExportOpen(false); return; }
+    }
+
+    // Don't handle shortcuts when in input fields (except Escape)
     const tag = (e.target as HTMLElement).tagName;
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
       if (e.key === "Escape") {
@@ -31,10 +52,18 @@ function App() {
       return;
     }
 
+    // Don't handle shortcuts when palette is open
+    if (paletteOpen()) return;
+
     switch (e.key) {
+      case ":":
+        e.preventDefault();
+        setPaletteOpen(true);
+        break;
       case "/":
         e.preventDefault();
-        document.getElementById("search-input")?.focus();
+        setActiveView("resources");
+        setTimeout(() => document.getElementById("search-input")?.focus(), 50);
         break;
       case "d":
         setActiveView("dashboard");
@@ -49,13 +78,24 @@ function App() {
         toggleTheme();
         break;
       case "r":
-        setActiveView("resources");
+        navigateToResources();
+        break;
+      case "f":
+        setActiveView("recommendations");
         break;
       case "a":
         setActiveView("accounts");
         break;
+      case "h":
+        setActiveView("history");
+        break;
+      case "m":
+        setActiveView("map");
+        break;
+      case "e":
+        setExportOpen(true);
+        break;
       case "Escape":
-        setSearchQuery("");
         break;
     }
   };
@@ -70,15 +110,23 @@ function App() {
 
   return (
     <>
-      <Header searchQuery={searchQuery()} onSearch={setSearchQuery} />
+      <Header />
       <div class="app-layout">
-        <Sidebar activeView={activeView()} onNavigate={setActiveView} />
+        <Sidebar
+          activeView={activeView()}
+          onNavigate={setActiveView}
+          onFilterResources={navigateToResources}
+          activeTypeFilter={typeFilter()}
+        />
         <main class="main-content">
           <Show when={activeView() === "dashboard"}>
             <Dashboard />
           </Show>
           <Show when={activeView() === "resources"}>
-            <ResourceExplorer searchQuery={searchQuery()} />
+            <ResourceExplorer
+              typeFilter={typeFilter()}
+              onClearFilter={() => setTypeFilter(null)}
+            />
           </Show>
           <Show when={activeView() === "scan"}>
             <ScanPanel />
@@ -87,28 +135,33 @@ function App() {
             <AccountManager />
           </Show>
           <Show when={activeView() === "settings"}>
-            <div>
-              <h2 style={{ "font-size": "18px", "margin-bottom": "16px" }}>
-                Settings
-              </h2>
-              <p style={{ color: "var(--text-muted)", "font-size": "13px" }}>
-                Rule configuration and preferences coming in Phase 2.
-              </p>
-            </div>
+            <SettingsPanel />
+          </Show>
+          <Show when={activeView() === "diff"}>
+            <ScanDiff />
           </Show>
           <Show when={activeView() === "recommendations"}>
-            <div>
-              <h2 style={{ "font-size": "18px", "margin-bottom": "16px" }}>
-                Recommendations
-              </h2>
-              <p style={{ color: "var(--text-muted)", "font-size": "13px" }}>
-                Cleanup recommendations coming in Phase 2.
-              </p>
-            </div>
+            <RecommendationsPanel />
+          </Show>
+          <Show when={activeView() === "history"}>
+            <ScanHistory />
+          </Show>
+          <Show when={activeView() === "map"}>
+            <InfraMap />
           </Show>
         </main>
       </div>
       <KeyboardBar />
+      <CommandPalette
+        open={paletteOpen()}
+        onClose={() => setPaletteOpen(false)}
+        onNavigate={setActiveView}
+        onExport={() => setExportOpen(true)}
+      />
+      <ExportDialog
+        open={exportOpen()}
+        onClose={() => setExportOpen(false)}
+      />
     </>
   );
 }
